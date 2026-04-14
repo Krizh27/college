@@ -1,0 +1,11 @@
+{"krish": {
+  "history": ["Expense added: Expense ID: 1 | Title: toppr | Amount: 50 | Category: FOOD | Date:2026-04-14"],
+  "budget": 950,
+  "expenses": [{
+    "date": "2026-04-14",
+    "amount": 50,
+    "id": 1,
+    "title": "toppr",
+    "category": "FOOD"
+  }]
+}}

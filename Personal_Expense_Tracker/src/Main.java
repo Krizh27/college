@@ -1,7 +1,7 @@
-import Ui.MainView;
+import Ui.AuthView;
 
 public class Main {
     public static void main(String[] args) {
-        MainView.main(args);
+        AuthView.main(args);
     }
 }

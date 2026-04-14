@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Optional;
 import Model.Category;
 import Service.ExpenseService;
+import Service.FileService;
 import Model.Expense;
 import Model.Category;
 import Model.Budget;
@@ -25,6 +26,8 @@ import java.time.LocalDate;
 
 public class MainView extends Application {
     private ExpenseService service = new ExpenseService();
+    private FileService fileService = new FileService();
+    private static String currentUser; // Will be set by AuthView
     private ObservableList<String> items = FXCollections.observableArrayList();
     private ListView<String> listView;
     private BarChart<String, Number> chart;
@@ -37,23 +40,42 @@ public class MainView extends Application {
     // new collection for removed‑ids
     private List<Integer> removedIds = new ArrayList<>();
 
+    public static void setCurrentUser(String username) {
+        currentUser = username;
+    }
+
     public static void main(String[] args) {
         launch(args);
     }
 
     @Override
     public void start(Stage primaryStage) {
-        TextInputDialog bd = new TextInputDialog("1000");
-        bd.setTitle("Initial Budget");
-        bd.setHeaderText("Set initial budget");
-        bd.setContentText("Budget:");
+        // Initialize ExpenseService with current user to load their data
+        service.initializeForUser(currentUser);
+        
+        // Check if user has existing budget
+        int existingBudget = fileService.loadBudgetByUser(currentUser);
         int initial = 1000;
-        try {
-            String res = bd.showAndWait().orElse("1000");
-            initial = Integer.parseInt(res);
-        } catch (Exception e) {
-            initial = 1000;
+        
+        if (existingBudget == -1) {
+            // No existing budget, ask for initial budget
+            TextInputDialog bd = new TextInputDialog("1000");
+            bd.setTitle("Initial Budget");
+            bd.setHeaderText("Set initial budget");
+            bd.setContentText("Budget:");
+            try {
+                String res = bd.showAndWait().orElse("1000");
+                initial = Integer.parseInt(res);
+            } catch (Exception e) {
+                initial = 1000;
+            }
+            // Save the budget
+            fileService.saveBudgetByUser(currentUser, initial);
+        } else {
+            // Use existing budget
+            initial = existingBudget;
         }
+        
         budget = new Budget(initial);
 
         listView = new ListView<>(items);
@@ -167,6 +189,7 @@ public class MainView extends Application {
         Expense e = new Expense(nextId++, t, c, amount);   // use the String and Category, not the dialogs
         service.addexpense(e);
         service.budgetupdater(amount, budget);
+        fileService.saveBudgetByUser(currentUser, budget.getLimit()); // Save budget
         
         // Check if remaining budget is below warning threshold
         if (budget.getLimit() < warningThreshold && budget.getLimit() > 0) {
@@ -192,6 +215,7 @@ public class MainView extends Application {
             if (amount > 0) {
                 budget.setLimit(budget.getLimit() + amount);
                 service.recordHistory("Inflow – added funds " + amount);  // record inflow
+                fileService.saveBudgetByUser(currentUser, budget.getLimit()); // Save budget
                 updateBudgetLabel();
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("Success");
@@ -241,6 +265,11 @@ public class MainView extends Application {
             String idPart = parts[0].trim();
             int id = Integer.parseInt(idPart.replaceAll("[^0-9]", ""));
             Expense removed = service.remove(id);                // now returns the object
+            if (removed != null) {
+                // Refund the amount back to budget
+                budget.setLimit(budget.getLimit() + removed.getamount());
+                fileService.saveBudgetByUser(currentUser, budget.getLimit()); // Save budget
+            }
             removedIds.add(id);                                  // remember for display
             refreshList();                                       // will keep the removed entry
             updateBudgetLabel();

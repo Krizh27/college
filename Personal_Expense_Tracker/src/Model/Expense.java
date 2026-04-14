@@ -40,6 +40,10 @@ public class Expense {
         return this.expenseid;
     }
 
+    public String getTitle() {
+        return this.title;
+    }
+
     //setter
     public void setamount(int am){
          this.amount=am;
@@ -49,6 +53,10 @@ public class Expense {
     }
     public void settitle(String title){
         this.title=title;
+    }
+
+    public void setDate(LocalDate date) {
+        this.date = date;
     }
 
     public java.time.LocalDate getDate(){
