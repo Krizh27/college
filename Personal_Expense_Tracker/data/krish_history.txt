@@ -1,0 +1,1 @@
+Expense added: Expense ID: 1 | Title: sarthak toppr | Amount: 50 | Category: FOOD | Date:2026-04-25

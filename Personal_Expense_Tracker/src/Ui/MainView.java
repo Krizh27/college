@@ -8,10 +8,6 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
-import javafx.scene.chart.CategoryAxis;
-import javafx.scene.chart.NumberAxis;
-import javafx.scene.chart.BarChart;
-import javafx.scene.chart.XYChart;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
@@ -20,9 +16,10 @@ import Model.Category;
 import Service.ExpenseService;
 import Service.FileService;
 import Model.Expense;
-import Model.Category;
 import Model.Budget;
 import java.time.LocalDate;
+import Exception.InvalidAmountException;
+import Exception.EmptyFieldException;
 
 public class MainView extends Application {
     private ExpenseService service = new ExpenseService();
@@ -30,8 +27,7 @@ public class MainView extends Application {
     private static String currentUser; // Will be set by AuthView
     private ObservableList<String> items = FXCollections.observableArrayList();
     private ListView<String> listView;
-    private BarChart<String, Number> chart;
-    private ChoiceBox<String> intervalChoice;
+    private ChartView chartView;
     private int nextId = 1;
     private Budget budget;
     private Label budgetLabel;
@@ -66,8 +62,13 @@ public class MainView extends Application {
             try {
                 String res = bd.showAndWait().orElse("1000");
                 initial = Integer.parseInt(res);
+                if (initial <= 0) {
+                    initial = 1000;
+                    new Alert(Alert.AlertType.WARNING, "Invalid budget amount. Using default 1000.").showAndWait();
+                }
             } catch (Exception e) {
                 initial = 1000;
+                new Alert(Alert.AlertType.WARNING, "Invalid budget amount. Using default 1000.").showAndWait();
             }
             // Save the budget
             fileService.saveBudgetByUser(currentUser, initial);
@@ -93,6 +94,9 @@ public class MainView extends Application {
         Button historyBtn = new Button("Show History");                // new button
         historyBtn.setOnAction(e -> showHistory());
 
+        Button chartsBtn = new Button("Show Charts");
+        chartsBtn.setOnAction(e -> showCharts());
+
         Button addFundsBtn = new Button("Add Funds");
         addFundsBtn.setOnAction(e -> addFundsDialog());
 
@@ -102,38 +106,22 @@ public class MainView extends Application {
         budgetLabel = new Label("Budget Remaining: " + budget.getLimit());
         budgetLabel.setStyle("-fx-font-size: 14; -fx-font-weight: bold;");
 
-        HBox controls = new HBox(8, addBtn, removeBtn, summaryBtn,
-                                 historyBtn, addFundsBtn, setLimitBtn); // include historyBtn
-        controls.setPadding(new Insets(5));
+        HBox controls1 = new HBox(8, addBtn, removeBtn, summaryBtn, historyBtn);
+        controls1.setPadding(new Insets(5));
         
-        VBox leftBox = new VBox(10, budgetLabel, listView, controls);
-        leftBox.setPadding(new Insets(10));
+        HBox controls2 = new HBox(8, chartsBtn, addFundsBtn, setLimitBtn);
+        controls2.setPadding(new Insets(5));
+        
+        VBox root = new VBox(10, budgetLabel, listView, controls1, controls2);
+        root.setPadding(new Insets(10));
 
-        CategoryAxis xAxis = new CategoryAxis();
-        NumberAxis yAxis = new NumberAxis();
-        xAxis.setLabel("Period");
-        yAxis.setLabel("Amount");
-        chart = new BarChart<>(xAxis, yAxis);
-        chart.setTitle("Expenses");
+        // Initialize ChartView
+        chartView = new ChartView(service);
 
-        intervalChoice = new ChoiceBox<>(FXCollections.observableArrayList("Daily", "Weekly", "Monthly", "Yearly"));
-        intervalChoice.setValue("Daily");
-        intervalChoice.getSelectionModel().selectedItemProperty().addListener((obs, oldV, newV) -> updateChart(newV));
-
-        VBox chartBox = new VBox(8, intervalChoice, chart);
-        chartBox.setPadding(new Insets(10));
-        chartBox.setPrefWidth(380);
-
-        BorderPane root = new BorderPane();
-        root.setLeft(leftBox);
-        root.setCenter(chartBox);
-
-        Scene scene = new Scene(root, 1000, 600);
+        Scene scene = new Scene(root, 650, 550);
         primaryStage.setTitle("Personal Expense Tracker");
         primaryStage.setScene(scene);
         primaryStage.show();
-
-        updateChart("Daily");
     }
 
     private void addExpenseDialog() {
@@ -150,6 +138,10 @@ public class MainView extends Application {
             amount = Integer.parseInt(amtResult.get().trim());
         } catch (NumberFormatException ex) {
             new Alert(Alert.AlertType.ERROR, "Invalid amount").showAndWait();
+            return;
+        }
+        if (amount <= 0) {
+            new Alert(Alert.AlertType.ERROR, "Amount must be a positive integer").showAndWait();
             return;
         }
 
@@ -186,23 +178,26 @@ public class MainView extends Application {
         }
         Category c = catResult.get();
 
-        Expense e = new Expense(nextId++, t, c, amount);   // use the String and Category, not the dialogs
-        service.addexpense(e);
-        service.budgetupdater(amount, budget);
-        fileService.saveBudgetByUser(currentUser, budget.getLimit()); // Save budget
-        
-        // Check if remaining budget is below warning threshold
-        if (budget.getLimit() < warningThreshold && budget.getLimit() > 0) {
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("Low Budget Warning");
-            alert.setHeaderText("Budget Running Low!");
-            alert.setContentText("Your remaining budget (" + budget.getLimit() + ") is below the warning limit (" + warningThreshold + ").");
-            alert.showAndWait();
-        }
+        try {
+            Expense e = new Expense(nextId++, t, c, amount);   // use the String and Category, not the dialogs
+            service.addexpense(e);
+            service.budgetupdater(amount, budget);
+            fileService.saveBudgetByUser(currentUser, budget.getLimit()); // Save budget
+            
+            // Check if remaining budget is below warning threshold
+            if (budget.getLimit() < warningThreshold && budget.getLimit() > 0) {
+                Alert alert = new Alert(Alert.AlertType.WARNING);
+                alert.setTitle("Low Budget Warning");
+                alert.setHeaderText("Budget Running Low!");
+                alert.setContentText("Your remaining budget (" + budget.getLimit() + ") is below the warning limit (" + warningThreshold + ").");
+                alert.showAndWait();
+            }
 
-        refreshList();
-        updateBudgetLabel();
-        updateChart(intervalChoice.getValue());
+            refreshList();
+            updateBudgetLabel();
+        } catch (InvalidAmountException | EmptyFieldException ex) {
+            new Alert(Alert.AlertType.ERROR, ex.getMessage()).showAndWait();
+        }
     }
 
     private void addFundsDialog() {
@@ -221,6 +216,8 @@ public class MainView extends Application {
                 alert.setTitle("Success");
                 alert.setContentText("Added " + amount + " to budget. New balance: " + budget.getLimit());
                 alert.showAndWait();
+            } else {
+                new Alert(Alert.AlertType.ERROR, "Amount must be a positive integer").showAndWait();
             }
         } catch (Exception e) {
             new Alert(Alert.AlertType.ERROR, "Invalid amount").showAndWait();
@@ -240,6 +237,8 @@ public class MainView extends Application {
                 alert.setTitle("Success");
                 alert.setContentText("Warning threshold set to: " + warningThreshold);
                 alert.showAndWait();
+            } else {
+                new Alert(Alert.AlertType.ERROR, "Warning threshold must be non-negative").showAndWait();
             }
         } catch (Exception e) {
             new Alert(Alert.AlertType.ERROR, "Invalid amount").showAndWait();
@@ -273,7 +272,6 @@ public class MainView extends Application {
             removedIds.add(id);                                  // remember for display
             refreshList();                                       // will keep the removed entry
             updateBudgetLabel();
-            updateChart(intervalChoice.getValue());
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Failed to remove expense").showAndWait();
         }
@@ -325,32 +323,8 @@ public class MainView extends Application {
         alert.showAndWait();
     }
 
-    private void updateChart(String interval){
-        if(interval==null) interval = "Daily";
-        chart.getData().clear();
-        java.util.Map<String, java.util.Map<Category, Integer>> totals =
-                service.getCategoryTotalsByInterval(interval);
-
-        List<String> periods = new ArrayList<>(totals.keySet());
-
-        if(periods.isEmpty()){
-            ((CategoryAxis)chart.getXAxis()).setCategories(FXCollections.observableArrayList());
-            return;
-        }
-
-        ((CategoryAxis)chart.getXAxis()).setCategories(FXCollections.observableArrayList(periods));
-
-        for(Category cat : Category.values()){
-            XYChart.Series<String,Number> series = new XYChart.Series<>();
-            series.setName(cat.name());
-            for(String p : periods){
-                int amount = 0;
-                java.util.Map<Category,Integer> m = totals.get(p);
-                if(m!=null) amount = m.getOrDefault(cat, 0);
-                series.getData().add(new XYChart.Data<>(p, amount));
-            }
-            chart.getData().add(series);
-        }
+    private void showCharts() {
+        chartView.showCharts();
     }
 
     private void refreshList() {

@@ -3,8 +3,6 @@ package Service;
 import Model.Category;
 import Model.Expense;
 import Model.Budget;
-import org.json.JSONArray;
-import org.json.JSONObject;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -33,53 +31,55 @@ public class ExpenseService {
 
     /**
      * Load user's expenses and history from file
+     * Format for expenses: id|amount|title|category|date
      */
     private void loadUserData() {
         expenses.clear();
         history.clear();
 
         // Load expenses
-        JSONArray expensesArray = fileService.loadExpensesByUser(currentUser);
-        for (int i = 0; i < expensesArray.length(); i++) {
-            JSONObject expObj = expensesArray.getJSONObject(i);
-            int id = expObj.getInt("id");
-            int amount = expObj.getInt("amount");
-            String title = expObj.getString("title");
-            String category = expObj.getString("category");
-            String dateStr = expObj.getString("date");
-            
-            Expense exp = new Expense(id, title, Category.valueOf(category), amount);
-            exp.setDate(LocalDate.parse(dateStr));
-            expenses.add(exp);
+        List<String> expenseLines = fileService.loadExpensesByUser(currentUser);
+        for (String line : expenseLines) {
+            if (line.trim().isEmpty()) continue;
+            try {
+                String[] parts = line.split("\\|");
+                if (parts.length >= 5) {
+                    int id = Integer.parseInt(parts[0].trim());
+                    int amount = Integer.parseInt(parts[1].trim());
+                    String title = parts[2].trim();
+                    String categoryStr = parts[3].trim();
+                    String dateStr = parts[4].trim();
+                    
+                    Expense exp = new Expense(id, title, Category.valueOf(categoryStr), amount);
+                    exp.setDate(LocalDate.parse(dateStr));
+                    expenses.add(exp);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
         // Load history
-        JSONArray historyArray = fileService.loadHistoryByUser(currentUser);
-        for (int i = 0; i < historyArray.length(); i++) {
-            history.add(historyArray.getString(i));
-        }
+        history = fileService.loadHistoryByUser(currentUser);
     }
 
     /**
      * Save current user's data to file
+     * Format for expenses: id|amount|title|category|date
      */
     private void saveUserData() {
         // Save expenses
-        JSONArray expensesArray = new JSONArray();
+        List<String> expenseLines = new ArrayList<>();
         for (Expense e : expenses) {
-            JSONObject expObj = new JSONObject();
-            expObj.put("id", e.getexpenseid());
-            expObj.put("amount", e.getamount());
-            expObj.put("title", e.getTitle());
-            expObj.put("category", e.getCategory().toString());
-            expObj.put("date", e.getDate().toString());
-            expensesArray.put(expObj);
+            String line = e.getexpenseid() + "|" + e.getamount() + "|" + 
+                         e.getTitle() + "|" + e.getCategory().toString() + "|" + 
+                         e.getDate().toString();
+            expenseLines.add(line);
         }
-        fileService.saveExpensesByUser(currentUser, expensesArray);
+        fileService.saveExpensesByUser(currentUser, expenseLines);
 
         // Save history
-        JSONArray historyArray = new JSONArray(history);
-        fileService.saveHistoryByUser(currentUser, historyArray);
+        fileService.saveHistoryByUser(currentUser, history);
     }
 
     public void addexpense(Expense e) {

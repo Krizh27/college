@@ -1,17 +1,16 @@
 package Service;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-import Model.UserAuth;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class FileService {
-    private static final String USERS_FILE = "data/users.json";
-    private static final String USER_DATA_FILE = "data/user_data.json";
+    private static final String DATA_DIR = "data";
+    private static final String USERS_FILE = "data/users.txt";
 
     public FileService() {
         createDataDirectory();
@@ -19,14 +18,15 @@ public class FileService {
 
     private void createDataDirectory() {
         try {
-            Files.createDirectories(Paths.get("data"));
+            Files.createDirectories(Paths.get(DATA_DIR));
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     /**
-     * Load all users from JSON file
+     * Load all users from text file
+     * Format: username|password (one per line)
      */
     public Map<String, String> loadUsers() {
         Map<String, String> users = new HashMap<>();
@@ -36,12 +36,13 @@ public class FileService {
                 return users;
             }
 
-            String content = new String(Files.readAllBytes(Paths.get(USERS_FILE)));
-            JSONObject json = new JSONObject(content);
-            JSONObject usersObj = json.getJSONObject("users");
-
-            for (String key : usersObj.keySet()) {
-                users.put(key, usersObj.getString(key));
+            List<String> lines = Files.readAllLines(Paths.get(USERS_FILE));
+            for (String line : lines) {
+                if (line.trim().isEmpty()) continue;
+                String[] parts = line.split("\\|");
+                if (parts.length == 2) {
+                    users.put(parts[0].trim(), parts[1].trim());
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -50,49 +51,16 @@ public class FileService {
     }
 
     /**
-     * Save all users to JSON file
+     * Save all users to text file
+     * Format: username|password (one per line)
      */
     public void saveUsers(Map<String, String> users) {
         try {
-            JSONObject json = new JSONObject();
-            JSONObject usersObj = new JSONObject();
-
+            List<String> lines = new ArrayList<>();
             for (Map.Entry<String, String> entry : users.entrySet()) {
-                usersObj.put(entry.getKey(), entry.getValue());
+                lines.add(entry.getKey() + "|" + entry.getValue());
             }
-
-            json.put("users", usersObj);
-
-            Files.write(Paths.get(USERS_FILE), json.toString(2).getBytes());
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * Load user data (expenses, budget, history)
-     */
-    private JSONObject loadUserDataFile() {
-        try {
-            File file = new File(USER_DATA_FILE);
-            if (!file.exists()) {
-                return new JSONObject();
-            }
-
-            String content = new String(Files.readAllBytes(Paths.get(USER_DATA_FILE)));
-            return new JSONObject(content);
-        } catch (IOException e) {
-            e.printStackTrace();
-            return new JSONObject();
-        }
-    }
-
-    /**
-     * Save user data (expenses, budget, history)
-     */
-    private void saveUserDataFile(JSONObject userData) {
-        try {
-            Files.write(Paths.get(USER_DATA_FILE), userData.toString(2).getBytes());
+            Files.write(Paths.get(USERS_FILE), lines);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -100,82 +68,99 @@ public class FileService {
 
     /**
      * Load expenses for a specific user
+     * Format: id|amount|title|category|date (one per line)
      */
-    public JSONArray loadExpensesByUser(String username) {
-        JSONObject userData = loadUserDataFile();
-        if (userData.has(username) && userData.getJSONObject(username).has("expenses")) {
-            return userData.getJSONObject(username).getJSONArray("expenses");
+    public List<String> loadExpensesByUser(String username) {
+        List<String> expenses = new ArrayList<>();
+        String expenseFile = DATA_DIR + "/" + username + "_expenses.txt";
+        try {
+            File file = new File(expenseFile);
+            if (!file.exists()) {
+                return expenses;
+            }
+            expenses = Files.readAllLines(Paths.get(expenseFile));
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        return new JSONArray();
+        return expenses;
     }
 
     /**
      * Save expenses for a specific user
+     * Format: id|amount|title|category|date (one per line)
      */
-    public void saveExpensesByUser(String username, JSONArray expenses) {
-        JSONObject userData = loadUserDataFile();
-        
-        if (!userData.has(username)) {
-            userData.put(username, new JSONObject());
+    public void saveExpensesByUser(String username, List<String> expenses) {
+        String expenseFile = DATA_DIR + "/" + username + "_expenses.txt";
+        try {
+            Files.write(Paths.get(expenseFile), expenses);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        
-        JSONObject userObj = userData.getJSONObject(username);
-        userObj.put("expenses", expenses);
-        
-        saveUserDataFile(userData);
     }
 
     /**
      * Load budget for a specific user
      */
     public int loadBudgetByUser(String username) {
-        JSONObject userData = loadUserDataFile();
-        if (userData.has(username) && userData.getJSONObject(username).has("budget")) {
-            return userData.getJSONObject(username).getInt("budget");
+        String budgetFile = DATA_DIR + "/" + username + "_budget.txt";
+        try {
+            File file = new File(budgetFile);
+            if (!file.exists()) {
+                return -1;
+            }
+            List<String> lines = Files.readAllLines(Paths.get(budgetFile));
+            if (!lines.isEmpty()) {
+                return Integer.parseInt(lines.get(0).trim());
+            }
+        } catch (IOException | NumberFormatException e) {
+            e.printStackTrace();
         }
-        return -1; // Indicates no existing budget
+        return -1;
     }
 
     /**
      * Save budget for a specific user
      */
     public void saveBudgetByUser(String username, int budget) {
-        JSONObject userData = loadUserDataFile();
-        
-        if (!userData.has(username)) {
-            userData.put(username, new JSONObject());
+        String budgetFile = DATA_DIR + "/" + username + "_budget.txt";
+        try {
+            List<String> lines = new ArrayList<>();
+            lines.add(String.valueOf(budget));
+            Files.write(Paths.get(budgetFile), lines);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        
-        JSONObject userObj = userData.getJSONObject(username);
-        userObj.put("budget", budget);
-        
-        saveUserDataFile(userData);
     }
 
     /**
      * Load history for a specific user
+     * Format: one history entry per line
      */
-    public JSONArray loadHistoryByUser(String username) {
-        JSONObject userData = loadUserDataFile();
-        if (userData.has(username) && userData.getJSONObject(username).has("history")) {
-            return userData.getJSONObject(username).getJSONArray("history");
+    public List<String> loadHistoryByUser(String username) {
+        List<String> history = new ArrayList<>();
+        String historyFile = DATA_DIR + "/" + username + "_history.txt";
+        try {
+            File file = new File(historyFile);
+            if (!file.exists()) {
+                return history;
+            }
+            history = Files.readAllLines(Paths.get(historyFile));
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        return new JSONArray();
+        return history;
     }
 
     /**
      * Save history for a specific user
+     * Format: one history entry per line
      */
-    public void saveHistoryByUser(String username, JSONArray history) {
-        JSONObject userData = loadUserDataFile();
-        
-        if (!userData.has(username)) {
-            userData.put(username, new JSONObject());
+    public void saveHistoryByUser(String username, List<String> history) {
+        String historyFile = DATA_DIR + "/" + username + "_history.txt";
+        try {
+            Files.write(Paths.get(historyFile), history);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        
-        JSONObject userObj = userData.getJSONObject(username);
-        userObj.put("history", history);
-        
-        saveUserDataFile(userData);
     }
 }

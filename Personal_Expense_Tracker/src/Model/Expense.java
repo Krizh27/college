@@ -1,6 +1,8 @@
 package Model;
 import java.time.LocalDate;
 import java.util.*;
+import Exception.InvalidAmountException;
+import Exception.EmptyFieldException;
 
 public class Expense {
     private int expenseid;
@@ -10,13 +12,14 @@ public class Expense {
     private LocalDate date;
     private List<String> history;
 
-    public Expense(int expenseid,int amount,String title,Category category,LocalDate d1){
+    public Expense(int expenseid,int amount,String title,Category category,LocalDate d1) throws InvalidAmountException, EmptyFieldException {
         this.expenseid=expenseid;
-        if(amount>=0){
-        this.amount=amount;
+        if(amount <= 0){
+            throw new InvalidAmountException("Amount must be a positive integer");
         }
-        else{
-            System.out.println("Invalid Amount");
+        this.amount=amount;
+        if(title == null || title.trim().isEmpty()){
+            throw new EmptyFieldException("Title cannot be empty");
         }
         this.title=title;
         this.category=category;
@@ -24,11 +27,17 @@ public class Expense {
         this.history=new ArrayList<>();
     }
 
-    public Expense(int id, String title, Category category, int amount) {
+    public Expense(int id, String title, Category category, int amount) throws InvalidAmountException, EmptyFieldException {
         this.expenseid = id;
+        if(amount <= 0){
+            throw new InvalidAmountException("Amount must be a positive integer");
+        }
+        this.amount = amount;
+        if(title == null || title.trim().isEmpty()){
+            throw new EmptyFieldException("Title cannot be empty");
+        }
         this.title = title;
         this.category = category;
-        this.amount = amount;
         this.date = LocalDate.now();
     }
 
